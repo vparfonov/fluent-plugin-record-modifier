@@ -90,6 +90,45 @@ class RecordModifierFilterTest < Test::Unit::TestCase
     ], d.filtered.map { |e| e.last }
   end
 
+  def test_convert_char_encoding_utf8_to_utf8
+    d = create_driver %[
+      char_encoding utf-8:utf-8
+    ]
+
+    d.run(default_tag: @tag) do
+      d.feed("k" => 'v'.force_encoding('utf-8'))
+      d.feed("k" => %w(v ビ).map{|v| v.force_encoding('utf-8')})
+      d.feed("k" => {"l" => 'ビ'.force_encoding('utf-8')})
+    end
+
+    assert_equal [
+      {"k" => 'v'.force_encoding('utf-8')},
+      {"k" => %w(v ビ).map{|v| v.encode!('utf-8')}},
+      {"k" => {"l" => 'ビ'.encode!('utf-8')}},
+    ], d.filtered.map { |e| e.last }
+  end
+
+  def test_convert_char_encoding_badchar_to_utf8
+    d = create_driver %[
+      char_encoding utf-8:utf-8
+    ]
+
+    bad_chars = Array.new
+    bad_chars = [0xC0, 0xC1, 0xA1].pack("c*").force_encoding("ISO-8859-1")
+
+    d.run(default_tag: @tag) do
+      d.feed("k" =>  bad_chars)
+      d.feed("k" => 'привіт')
+      d.feed("k" => 'こんにちは')
+    end
+
+    assert_equal [
+      {"k" => '���'.encode!('utf-8')},
+      {"k" => 'привіт'.encode!('utf-8')},
+      {"k" => 'こんにちは'.encode!('utf-8')},
+    ], d.filtered.map { |e| e.last }
+  end
+
   def test_remove_one_key
     d = create_driver %[
       remove_keys k1
